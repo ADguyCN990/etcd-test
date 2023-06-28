@@ -16,6 +16,20 @@ func (D *Dao) Init(a *gorm.DB) {
 	db = a
 }
 
+// CloseDB 关闭与数据库的连接
+func (D *Dao) CloseDB() error {
+	// 关闭数据库连接
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	err = sqlDB.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // AddTask 新增一个任务
 func (D *Dao) AddTask(taskName *string) error {
 	location, err := time.LoadLocation("Asia/Shanghai")

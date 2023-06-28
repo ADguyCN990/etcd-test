@@ -1,9 +1,10 @@
 package start
 
 import (
+	"etcd-test/interval/dao"
 	"etcd-test/interval/model/entity"
+	"etcd-test/interval/webServer"
 	"fmt"
-	"github.com/kataras/iris/v12"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	"gorm.io/driver/mysql"
@@ -12,7 +13,7 @@ import (
 	"path/filepath"
 )
 
-var config Config
+var ConfigData Config
 
 type Init struct {
 }
@@ -36,6 +37,7 @@ type DataSource struct {
 	Charset    string `yaml:"charset"`
 }
 
+// InitConfig 读取配置文件
 func (s *Init) InitConfig() error {
 	// 获取当前工作目录的绝对路径
 	wd, err := os.Getwd()
@@ -61,7 +63,7 @@ func (s *Init) InitConfig() error {
 	}(configFile)
 
 	// 解析配置文件
-	err = yaml.NewDecoder(configFile).Decode(&config)
+	err = yaml.NewDecoder(configFile).Decode(&ConfigData)
 	if err != nil {
 		logrus.WithError(err).Error("无法解析配置文件")
 		return err
@@ -69,15 +71,16 @@ func (s *Init) InitConfig() error {
 	return nil
 }
 
+// Database 连接数据库并启动gorm
 func (s *Init) Database() (*gorm.DB, error) {
 	//从配置文件中获取数据库连接信息
-	driverName := config.DataSource.DriverName
-	host := config.DataSource.Host
-	port := config.DataSource.Port
-	database := config.DataSource.Database
-	username := config.DataSource.Username
-	password := config.DataSource.Password
-	charset := config.DataSource.Charset
+	driverName := ConfigData.DataSource.DriverName
+	host := ConfigData.DataSource.Host
+	port := ConfigData.DataSource.Port
+	database := ConfigData.DataSource.Database
+	username := ConfigData.DataSource.Username
+	password := ConfigData.DataSource.Password
+	charset := ConfigData.DataSource.Charset
 
 	//构建数据库连接字符串
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=true",
@@ -101,17 +104,23 @@ func (s *Init) Database() (*gorm.DB, error) {
 	return db, nil
 }
 
-func (s *Init) Iris() (*iris.Application, error) {
-	app := iris.New()
-	return app, nil
-}
-
-func (s *Init) IrisListen(app *iris.Application) error {
-	serverPort := config.Server.Port
-	err := app.Run(iris.Addr(":" + serverPort))
+func (s *Init) Exit() {
+	// 关闭与数据库的连接
+	var da = &dao.Dao{}
+	err := da.CloseDB()
 	if err != nil {
-		logrus.WithError(err).Error("Iris无法监听端口：", serverPort)
-		return err
+		logrus.WithError(err).Error("无法断开与数据库的连接")
+		return
 	}
-	return nil
+	logrus.Info("成功断开与数据库的连接")
+
+	// 关闭iris server
+	var se = &webServer.Server{}
+	err = se.ShutdownServer()
+	if err != nil {
+		logrus.WithError(err).Error("无法关闭iris")
+		return
+	}
+	logrus.Info("成功关闭iris")
+
 }
