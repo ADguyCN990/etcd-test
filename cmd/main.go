@@ -15,7 +15,6 @@ var st = &start.Init{}
 var Dao = &dao.Dao{}
 var rt = &router.Router{}
 var se = &service.Service{}
-var wg = sync.WaitGroup{}
 var ir = &webServer.Server{}
 
 func main() {
@@ -62,8 +61,9 @@ func main() {
 	}()
 
 	// 监听中断信号，优雅退出程序
-	c := pkg.NewShutdownSignal()
-	pkg.WaitExit(c, st.Exit)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	pkg.WaitExit(&wg, st.Exit)
 
 	wg.Wait()
 
