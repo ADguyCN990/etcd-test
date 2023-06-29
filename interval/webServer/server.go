@@ -29,10 +29,14 @@ func (s *Server) NewIris() (*iris.Application, error) {
 
 // IrisListen Iris开启对端口的监听
 func (s *Server) IrisListen(serverPort string) error {
-	app.Run(iris.Addr(":"+serverPort), iris.WithoutInterruptHandler)
+	err := app.Run(iris.Addr(":"+serverPort), iris.WithoutInterruptHandler)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
+// ShutdownServer 关闭Iris服务
 func (s *Server) ShutdownServer() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

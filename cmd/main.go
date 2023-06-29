@@ -3,21 +3,21 @@ package main
 import (
 	"etcd-test/interval/dao"
 	"etcd-test/interval/service"
+	"etcd-test/interval/start"
 	"etcd-test/interval/webServer"
 	"etcd-test/pkg"
-	"etcd-test/start"
-	"github.com/kataras/iris/v12/core/router"
 	"github.com/sirupsen/logrus"
 	"sync"
 )
 
 var st = &start.Init{}
 var Dao = &dao.Dao{}
-var rt = &router.Router{}
 var se = &service.Service{}
 var ir = &webServer.Server{}
 
 func main() {
+	// 优雅退出程序用
+	var wg sync.WaitGroup
 
 	// 加载配置文件
 	err := st.InitConfig()
@@ -47,23 +47,52 @@ func main() {
 	}
 
 	// 监听数据库新增数据
+	DbRoutine := pkg.NewCloseGoRoutineChannel()
+	wg.Add(1)
 	go func() {
-		err := se.Listen()
-		if err != nil {
-			logrus.WithError(err).Fatal("数据库监听失败")
+		defer wg.Done()
+		for {
+			select {
+			case _, ok := <-DbRoutine:
+				if !ok {
+					logrus.Info("收到中断信号，关闭监听数据库的协程...")
+					return
+				}
+			default:
+				err := se.Listen()
+				if err != nil {
+					logrus.WithError(err).Fatal("数据库监听失败")
+				}
+			}
 		}
-		logrus.Info("成功监听数据库的新增数据")
+
 	}()
 
 	// 开始监听端口
+	IrisPortRoutine := pkg.NewCloseGoRoutineChannel()
+	wg.Add(1)
 	go func() {
-		err = ir.IrisListen(start.ConfigData.Server.Port)
+		defer wg.Done()
+		for {
+			select {
+			case _, ok := <-IrisPortRoutine:
+				logrus.Info("收到关闭协程channel发送的消息了")
+				if !ok {
+					logrus.Info("收到中断信号，关闭监听Iris端口的协程...")
+					return
+				}
+			default:
+				err = ir.IrisListen(start.ConfigData.Server.Port)
+				if err != nil {
+					logrus.WithError(err).Fatal("IrisServer端口监听失败")
+				}
+			}
+		}
 	}()
 
 	// 监听中断信号，优雅退出程序
-	var wg sync.WaitGroup
 	wg.Add(1)
-	pkg.WaitExit(&wg, st.Exit)
+	pkg.WaitExit(&wg, st.Exit, &DbRoutine, &IrisPortRoutine)
 
 	wg.Wait()
 
